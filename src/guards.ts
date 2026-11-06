@@ -3,18 +3,19 @@ import type { GuardSignal } from './types.js';
 
 /** Authorization decorators (NestJS and common libs). Matched on the decorator's name. */
 const GUARD_DECORATORS =
-  /^(Permissions?|RequirePermissions?|HasPermissions?|RequiresPermissions?|UseGuards|Roles?|HasRoles?|CheckPolicies|CheckAbilities|HasAbilit(y|ies)|Auth|Authorize|RequireAuth|Scopes?|RequiresScopes?|HasScopes?|RequireScopes?|Can|Ability)$/i;
+  /^(Permissions?|RequirePermissions?|HasPermissions?|RequiresPermissions?|UseGuards|Roles?|HasRoles?|MembershipRoles?|RequireMembership|CheckPolicies|CheckAbilities|HasAbilit(y|ies)|Auth|Authorize|RequireAuth|Scopes?|RequiresScopes?|HasScopes?|RequireScopes?|Can|Ability)$/i;
 
 /**
- * Parameter decorators that inject the current actor (user/session/account). A handler that pulls
- * the authenticated principal and uses it is scoping to that actor — a strong authorization signal.
+ * Parameter decorators that inject the current actor (user/session/account/org). A handler that
+ * pulls the authenticated principal and uses it is scoping to that actor — a strong auth signal.
+ * Matched as a substring so custom variants like @GetUserFromRequest / @GetOrgFromRequest count.
  */
 const ACTOR_PARAM =
-  /^(Impersonation|GetUser|CurrentUser|AuthUser|AuthedUser|LoggedInUser|ReqUser|RequestUser|User|UserId|GetUserId|Session|Principal|Account|CurrentAccount|Actor|Me)$/i;
+  /(impersonation|getuser|currentuser|authuser|autheduser|loggedinuser|requser|requestuser|user.?from.?request|getuserid|getorg|org.?from.?request|getsession|session.?from.?request|getaccount|account.?from.?request|getmember|getworkspace|workspace.?from.?request|getteam|gettenant|principal|^user$|^session$|^account$|^org$|^me$|^actor$|^viewer$)/i;
 
 /** Call-expression names that strongly imply an authorization/ownership check. */
 const GUARD_CALL =
-  /(verif(y|ies).*access|assert[A-Z_]|assertcan|^can[A-Z]|can[A-Z]\w*access|check.*perm|check.*access|ensure.*(owner|access|member|permission)|authoriz|requireaccess|requireperm|hasperm|haspermission|hasaccess|canaccess|checkowner|validatepermission|guard)/i;
+  /(verif(y|ies).*access|assert[A-Z_]|assertcan|^can[A-Z]|can[A-Z]\w*access|check.*perm|check.*access|ensure.*(owner|access|member|permission)|validate\w*(owner|access|member|permission|ownership)|authoriz|requireaccess|requireperm|hasperm|haspermission|hasaccess|canaccess|checkowner|validatepermission|guard)/i;
 
 /** Property keys that imply a query is scoped to the current actor/tenant. */
 const SCOPE_KEYS =

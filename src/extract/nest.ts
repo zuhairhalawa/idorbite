@@ -13,6 +13,10 @@ const PUBLIC_DECORATOR = /^(Public|SkipAuth|NoAuth|Anonymous|AllowAnonymous|Unau
 /** Handler names that are public by nature or authenticated out-of-band (webhook signatures). */
 const PUBLIC_NAME = /(manifest|sitemap|robots|favicon|healthz?|readiness|liveness|^ping$|callback|webhook|^oauth)/i;
 
+/** Route paths that are intentionally unauthenticated (by design) or authed out-of-band. */
+const PUBLIC_ROUTE =
+  /(^|\/)(public|cron|internal|_internal|webhooks?|health|\.well-known)(\/|$)/i;
+
 export function extractNestHandlers(project: Project): Handler[] {
   const out: Handler[] = [];
   for (const sf of project.getSourceFiles()) {
@@ -32,10 +36,14 @@ export function extractNestHandlers(project: Project): Handler[] {
         const body = m.getBody();
         const routePath = joinPath(base, http.path);
         const pathParams = paramNames(m, routePath);
+        const queryNames = queryParamNames(m);
+        const isOAuthCallback = queryNames.has('state') && queryNames.has('code');
         const isPublic =
           classIsPublic ||
           methodDecoratorNames.some((n) => PUBLIC_DECORATOR.test(n)) ||
-          PUBLIC_NAME.test(m.getName());
+          PUBLIC_NAME.test(m.getName()) ||
+          PUBLIC_ROUTE.test(routePath) ||
+          isOAuthCallback;
         out.push({
           framework: 'nestjs',
           file: sf.getFilePath(),
@@ -95,6 +103,20 @@ function paramNames(m: MethodDeclaration, routePath: string): string[] {
   }
   for (const m2 of routePath.matchAll(/:(\w+)/g)) names.add(m2[1]);
   return [...names];
+}
+
+/** Names bound via @Query('x'); used to detect OAuth callbacks (state + code). */
+function queryParamNames(m: MethodDeclaration): Set<string> {
+  const names = new Set<string>();
+  for (const p of m.getParameters()) {
+    for (const d of p.getDecorators()) {
+      if (decoratorName(d) === 'Query') {
+        const n = d.getArguments()[0]?.getText().match(/['"`]([^'"`]*)['"`]/)?.[1];
+        if (n) names.add(n);
+      }
+    }
+  }
+  return names;
 }
 
 function joinPath(base: string, sub: string): string {
