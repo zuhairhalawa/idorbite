@@ -49,25 +49,33 @@ function exportedMethodFns(sf: SourceFile): Array<[string, Node | undefined]> {
   for (const v of sf.getVariableDeclarations()) {
     const n = v.getName();
     if (!v.isExported() || !METHODS.has(n as HttpMethod)) continue;
-    const fn = unwrapHandler(v.getInitializer());
+    const fn = unwrapHandler(v.getInitializer(), sf);
     if (fn) res.push([n, fn]);
   }
   return res;
 }
 
 /**
- * Resolve the handler function from an initializer, unwrapping auth wrappers like
- * `withTeamApi(async (req) => {...})` or `withWorkspace(handler, opts)`. The wrapper provides
- * authentication, not object-level scoping — we analyze the inner function's own guards.
+ * Resolve the handler function from an initializer:
+ *  - unwrap auth wrappers like `withTeamApi(async (req) => {...})` / `withWorkspace(handler, opts)`
+ *    (the wrapper authenticates but doesn't object-scope — we analyze the inner function's guards);
+ *  - resolve identifier references like `export const GET = handler;` to the local declaration.
  */
-function unwrapHandler(node: Node | undefined, depth = 0): Node | undefined {
-  if (!node || depth > 4) return undefined;
+function unwrapHandler(node: Node | undefined, sf: SourceFile, depth = 0): Node | undefined {
+  if (!node || depth > 6) return undefined;
   if (Node.isArrowFunction(node) || Node.isFunctionExpression(node)) return node.getBody();
   if (Node.isCallExpression(node)) {
     for (const arg of node.getArguments()) {
-      const body = unwrapHandler(arg, depth + 1);
+      const body = unwrapHandler(arg, sf, depth + 1);
       if (body) return body;
     }
+  }
+  if (Node.isIdentifier(node)) {
+    const name = node.getText();
+    const vd = sf.getVariableDeclaration(name);
+    if (vd) return unwrapHandler(vd.getInitializer(), sf, depth + 1);
+    const fn = sf.getFunction(name);
+    if (fn) return fn.getBody();
   }
   return undefined;
 }

@@ -23,6 +23,13 @@ const SCOPE_KEYS =
 /** Query-builder/ORM call names near which a scope key counts as a scoped query. */
 const QUERY_CALL = /^(find|findOne|findFirst|findUnique|findMany|findUniqueOrThrow|findOneOrThrow|count|aggregate|update|updateMany|delete|deleteMany|get|where|createQueryBuilder|andWhere)/i;
 
+/** Call names that fetch/authorize a resource; when handed the tenant/actor they scope the object. */
+const OWNERSHIP_FETCH = /^(get|find|fetch|load|resolve|ensure|assert|require|verify|authoriz|check|can|has)[A-Z]/;
+
+/** Identifier/property names that denote the authenticated tenant or actor. */
+const TENANT_TOKEN =
+  /^(workspace|user|session|account|team|org|organization|member|actor|viewer|currentUser|authUser|principal|me|ctx)$/i;
+
 /** Detect guard signals inside a handler function node, given its decorator names/text. */
 export function detectGuards(
   body: Node | undefined,
@@ -55,6 +62,9 @@ export function detectGuards(
       const callName = calleeName(node);
       if (callName && GUARD_CALL.test(callName)) {
         add({ kind: 'call', detail: callName });
+      } else if (callName && OWNERSHIP_FETCH.test(callName) && callArgsCarryTenant(node)) {
+        // e.g. getDomainOrThrow({ workspace, domain }) — fetches AND scopes to the tenant
+        add({ kind: 'call', detail: `${callName}(tenant-scoped)` });
       }
     }
     // scoped query: a property assignment whose key is a scope key, sitting inside a query call
@@ -76,6 +86,24 @@ export function calleeName(call: Node): string | undefined {
   if (Node.isIdentifier(expr)) return expr.getText();
   if (Node.isPropertyAccessExpression(expr)) return expr.getName();
   return undefined;
+}
+
+/** Does any argument of this call carry the authenticated tenant/actor (so the fetch is scoped)? */
+function callArgsCarryTenant(call: Node): boolean {
+  const args = call.asKind(SyntaxKind.CallExpression)?.getArguments() ?? [];
+  const isTenant = (name: string) => TENANT_TOKEN.test(name) || SCOPE_KEYS.test(name);
+  for (const arg of args) {
+    if (Node.isIdentifier(arg) && isTenant(arg.getText())) return true;
+    if (Node.isPropertyAccessExpression(arg) && isTenant(arg.getName())) return true;
+    if (Node.isObjectLiteralExpression(arg)) {
+      for (const prop of arg.getProperties()) {
+        if ((Node.isPropertyAssignment(prop) || Node.isShorthandPropertyAssignment(prop)) && isTenant(prop.getName())) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 /** Is this node nested inside a call whose name looks like an ORM/query method? */
