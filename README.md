@@ -2,6 +2,10 @@
 
 **Find broken object-level authorization (IDOR / BOLA) in JS/TS backends — the #1 API security risk — by spotting handlers that forgot the check their siblings have.**
 
+<p align="center">
+  <img src="docs/demo.gif" alt="idorbite flagging a broken object-level authorization gap" width="820">
+</p>
+
 The most common access-control bug in real apps isn't exotic. It's one route handler that
 queries a resource *without* the ownership/tenant scope that every sibling handler on that same
 resource applies. `idorbite` finds those gaps with a real AST — no API key, fully offline.
